@@ -89,12 +89,14 @@
         // Game state
         let score = 0;
         let gameRunning = true;
+        let powerMode = false;
+        let powerModeTimer = 0;
         let pacman = { x: 1, y: 1, direction: 'right' };
         let ghosts = [
-            { x: 14, y: 14, direction: 'up', color: '#ff0000' },
-            { x: 15, y: 14, direction: 'down', color: '#ffb8ff' },
-            { x: 14, y: 15, direction: 'left', color: '#00ffff' },
-            { x: 15, y: 15, direction: 'right', color: '#ffb852' }
+            { x: 14, y: 14, direction: 'up', color: '#ff0000', originalColor: '#ff0000' },
+            { x: 15, y: 14, direction: 'down', color: '#ffb8ff', originalColor: '#ffb8ff' },
+            { x: 14, y: 15, direction: 'left', color: '#00ffff', originalColor: '#00ffff' },
+            { x: 15, y: 15, direction: 'right', color: '#ffb852', originalColor: '#ffb852' }
         ];
 
         // Improved maze layout with better connectivity (1 = wall, 0 = dot, 2 = empty, 3 = power pellet)
@@ -193,24 +195,66 @@
 
         function drawGhosts() {
             ghosts.forEach(ghost => {
-                const x = ghost.x * CELL_SIZE;
-                const y = ghost.y * CELL_SIZE;
+                const x = ghost.x * CELL_SIZE + 2;
+                const y = ghost.y * CELL_SIZE + 2;
+                const size = CELL_SIZE - 4;
+                const centerX = x + size/2;
+                const centerY = y + size/2;
                 
                 ctx.fillStyle = ghost.color;
-                ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
                 
-                // Simple ghost shape
+                // Draw classic ghost shape
                 ctx.beginPath();
-                ctx.arc(x + CELL_SIZE/2, y + CELL_SIZE/2, CELL_SIZE/2 - 2, Math.PI, 0);
+                
+                // Rounded top (semicircle)
+                ctx.arc(centerX, y + size/3, size/3, Math.PI, 0, false);
+                
+                // Straight sides down
+                ctx.lineTo(x + size, y + size - 3);
+                
+                // Wavy bottom (classic ghost bottom)
+                const waveHeight = 3;
+                const waveWidth = size / 4;
+                for (let i = 0; i < 4; i++) {
+                    const waveX = x + size - (i * waveWidth);
+                    const waveY = y + size - (i % 2 === 0 ? 0 : waveHeight);
+                    ctx.lineTo(waveX, waveY);
+                }
+                
+                // Complete the shape
+                ctx.lineTo(x, y + size - 3);
+                ctx.lineTo(x, y + size/3);
+                
                 ctx.fill();
                 
-                // Eyes
+                // Eyes (larger and more authentic)
                 ctx.fillStyle = '#fff';
-                ctx.fillRect(x + 5, y + 5, 3, 3);
-                ctx.fillRect(x + 12, y + 5, 3, 3);
+                const eyeSize = 4;
+                const eyeY = y + size/3 - 2;
+                
+                // Left eye
+                ctx.beginPath();
+                ctx.arc(x + size/3, eyeY, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Right eye
+                ctx.beginPath();
+                ctx.arc(x + (2 * size/3), eyeY, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Eye pupils
                 ctx.fillStyle = '#000';
-                ctx.fillRect(x + 6, y + 6, 1, 1);
-                ctx.fillRect(x + 13, y + 6, 1, 1);
+                const pupilSize = 2;
+                
+                // Left pupil
+                ctx.beginPath();
+                ctx.arc(x + size/3, eyeY, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Right pupil
+                ctx.beginPath();
+                ctx.arc(x + (2 * size/3), eyeY, pupilSize, 0, Math.PI * 2);
+                ctx.fill();
             });
         }
 
@@ -246,8 +290,11 @@
                     score += 10;
                     maze[newY][newX] = 2;
                 } else if (maze[newY][newX] === 3) {
+                    // Power pellet eaten!
                     score += 50;
                     maze[newY][newX] = 2;
+                    console.log("Power pellet eaten! Activating power mode...");
+                    activatePowerMode();
                 }
                 
                 scoreElement.textContent = score;
@@ -308,7 +355,16 @@
                 
                 // Check collision with Pacman
                 if (ghost.x === pacman.x && ghost.y === pacman.y) {
-                    gameOver('GAME OVER!');
+                    if (powerMode) {
+                        // Pac-Man can eat the ghost!
+                        score += 200;
+                        scoreElement.textContent = score;
+                        // Reset ghost to starting position
+                        ghost.x = 14 + (index % 2);
+                        ghost.y = 14 + Math.floor(index / 2);
+                    } else {
+                        gameOver('GAME OVER!');
+                    }
                 }
             });
         }
@@ -355,6 +411,40 @@
             return bestMove;
         }
 
+        function activatePowerMode() {
+            console.log("Power mode activated!");
+            powerMode = true;
+            powerModeTimer = 100; // 10 seconds at 100ms intervals
+            
+            // Turn all ghosts blue
+            ghosts.forEach((ghost, index) => {
+                console.log(`Ghost ${index} color changing from ${ghost.color} to blue`);
+                ghost.color = '#0000ff';
+            });
+            console.log("All ghosts should now be blue");
+        }
+
+        function updatePowerMode() {
+            if (powerMode) {
+                powerModeTimer--;
+                
+                // Flash ghosts when power mode is about to end
+                if (powerModeTimer <= 20 && powerModeTimer % 4 === 0) {
+                    ghosts.forEach(ghost => {
+                        ghost.color = ghost.color === '#0000ff' ? '#ffffff' : '#0000ff';
+                    });
+                }
+                
+                // End power mode
+                if (powerModeTimer <= 0) {
+                    powerMode = false;
+                    ghosts.forEach(ghost => {
+                        ghost.color = ghost.originalColor;
+                    });
+                }
+            }
+        }
+
         function getDistance(x1, y1, x2, y2) {
             return Math.abs(x1 - x2) + Math.abs(y1 - y2); // Manhattan distance
         }
@@ -380,12 +470,14 @@
         function restartGame() {
             score = 0;
             gameRunning = true;
+            powerMode = false;
+            powerModeTimer = 0;
             pacman = { x: 1, y: 1, direction: 'right' };
             ghosts = [
-                { x: 14, y: 14, direction: 'up', color: '#ff0000' },
-                { x: 15, y: 14, direction: 'down', color: '#ffb8ff' },
-                { x: 14, y: 15, direction: 'left', color: '#00ffff' },
-                { x: 15, y: 15, direction: 'right', color: '#ffb852' }
+                { x: 14, y: 14, direction: 'up', color: '#ff0000', originalColor: '#ff0000' },
+                { x: 15, y: 14, direction: 'down', color: '#ffb8ff', originalColor: '#ffb8ff' },
+                { x: 14, y: 15, direction: 'left', color: '#00ffff', originalColor: '#00ffff' },
+                { x: 15, y: 15, direction: 'right', color: '#ffb852', originalColor: '#ffb852' }
             ];
             maze = originalMaze.map(row => [...row]);
             scoreElement.textContent = score;
@@ -395,6 +487,7 @@
 
         function gameLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updatePowerMode(); // Update power mode timer
             drawMaze();
             drawPacman();
             drawGhosts();
